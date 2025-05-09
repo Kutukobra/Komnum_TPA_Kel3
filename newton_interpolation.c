@@ -3,6 +3,7 @@
 #define INPUT_FILE "DataTPA.csv"
 #define BUFFER_SIZE 1024
 #define DATA_COUNT 60
+#define SAMPLE_SIZE 3
 #define SEARCH_COUNT 4
 
 typedef struct Data {
@@ -17,12 +18,12 @@ Data readDataLine(char *line) {
     return ret;
 }
 
-void forward(float x[DATA_COUNT], float y[DATA_COUNT][DATA_COUNT], float a) 
+float newton_interpolation(float x[SAMPLE_SIZE], float y[SAMPLE_SIZE][SAMPLE_SIZE], float a) 
 { 
     int i, j; 
     float h, u, sum, p; 
-    for (j = 1; j < DATA_COUNT; j++) { 
-        for (i = 0; i < DATA_COUNT - j; i++) { 
+    for (j = 1; j < SAMPLE_SIZE; j++) { 
+        for (i = 0; i < SAMPLE_SIZE - j; i++) { 
             y[i][j] = y[i + 1][j - 1] - y[i][j - 1]; 
         } 
     } 
@@ -31,35 +32,14 @@ void forward(float x[DATA_COUNT], float y[DATA_COUNT][DATA_COUNT], float a)
     sum = y[0][0]; 
     h = x[1] - x[0]; 
     u = (a - x[0]) / h; 
-    for (j = 1; j < DATA_COUNT; j++) { 
+    for (j = 1; j < SAMPLE_SIZE; j++) { 
         p = p * (u - j + 1) / j; 
         sum = sum + p * y[0][j]; 
     } 
 
-    printf("Forward y at x=%0.0f is %0.5f", a, sum); 
+    return sum;
 } 
 
-void BackWard(float x[DATA_COUNT], float y[DATA_COUNT][DATA_COUNT], float a) 
-{ 
-    int i, j; 
-    float h, u, sum, p; 
-    for (j = 1; j < DATA_COUNT; j++) { 
-        for (i = j; i < DATA_COUNT; i++) { 
-            y[i][j] = y[i][j - 1] - y[i - 1][j - 1]; 
-        } 
-    } 
-
-    p = 1.0; 
-    sum = y[DATA_COUNT - 1][0]; 
-    h = x[1] - x[0]; 
-    u = (a - x[DATA_COUNT - 1]) / h; 
-    for (j = 1; j < DATA_COUNT; j++) { 
-        p = p * (u + j - 1) / j; 
-        sum = sum + p * y[DATA_COUNT - 1][j]; 
-    } 
-
-    printf("Backward y at x=%0.0f is %0.5f\n", a, sum); 
-}
 
 int main() {
     FILE *finput = fopen(INPUT_FILE, "r");
@@ -75,31 +55,38 @@ int main() {
         printf("%s", buffer);
     }
 
-    float tableu_percentage[DATA_COUNT][DATA_COUNT] = {0.0f};
-    float tableu_population[DATA_COUNT][DATA_COUNT] = {0.0f};
-    float year[DATA_COUNT];
-
-    for (int i = 0; i < DATA_COUNT; i++) {
-        tableu_percentage[i][0] = dataArray[i].user_percentage;
-        tableu_population[i][0] = dataArray[i].population;
-        year[i] = dataArray[i].year;
-    }
-
+    float tableu_percentage[SAMPLE_SIZE][SAMPLE_SIZE] = {0.0f};
+    float tableu_population[SAMPLE_SIZE][SAMPLE_SIZE] = {0.0f};
+    float year[SAMPLE_SIZE];
 
     int search[SEARCH_COUNT] = {2005, 2006, 2015, 2016};
 
-    for (int i = 0; i < SEARCH_COUNT; i++) {
-        printf("-----\n");
-        printf("Data for %d\n", search[i]);
-        printf("Percentage\n");
-        forward(year, tableu_percentage, search[i]);
-        putchar('\n');
-        BackWard(year, tableu_percentage, search[i]);
-        printf("Population\n");
-        forward(year, tableu_population, search[i]);
-        putchar('\n');
-        BackWard(year, tableu_population, search[i]);
-        printf("-----\n");
+    for (int j = 0; j < SEARCH_COUNT; j++) {
+        int mid_index = -1;
+        for (int i = 0; i < DATA_COUNT; i++) {
+            if (dataArray[i].year >= search[j]) {
+                mid_index = i;
+                break;
+            }
+        }
+        if (mid_index == -1) mid_index = DATA_COUNT - 1;  // fallback if search is beyond max year
+
+        int sample_start = mid_index - SAMPLE_SIZE / 2;
+        if (sample_start < 0) sample_start = 0;
+        if (sample_start + SAMPLE_SIZE > DATA_COUNT) sample_start = DATA_COUNT - SAMPLE_SIZE;
+
+            
+        for (int i = 0; i < SAMPLE_SIZE; i++) {
+            year[i] = dataArray[i + sample_start].year;
+            tableu_percentage[i][0] = dataArray[i + sample_start].user_percentage;
+            tableu_population[i][0] = dataArray[i + sample_start].population;
+        }
+
+        float percentage = newton_interpolation(year, tableu_percentage, search[j]);
+        float population = newton_interpolation(year, tableu_population, search[j]);
+        printf("---\n%d\n", search[j]);
+        printf("Internet User Percentage\t:\t%f\n", percentage);
+        printf("Population\t\t\t:\t%f\n", population);
     }
 }
 
